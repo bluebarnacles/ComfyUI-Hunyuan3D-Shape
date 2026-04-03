@@ -74,10 +74,10 @@ class Hy3DMeshGenerator:
             "required": {
                 "model": (folder_paths.get_filename_list("diffusion_models"), {"tooltip": "DiT model from ComfyUI/models/diffusion_models/"}),
                 "image": ("IMAGE", {"tooltip": "Image to generate mesh from"}),
-                "steps": ("INT", {"default": 50, "min": 1, "max": 100, "step": 1}),
-                "guidance_scale": ("FLOAT", {"default": 5.0, "min": 1, "max": 30, "step": 0.1}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF}),
-                "attention_mode": (["sdpa", "sageattn"], {"default": "sdpa"}),
+                "steps": ("INT", {"default": 50, "min": 1, "max": 100, "step": 1, "tooltip": "Number of diffusion denoising steps. More steps = higher quality but slower. 50 is a good default"}),
+                "guidance_scale": ("FLOAT", {"default": 5.0, "min": 1, "max": 30, "step": 0.1, "tooltip": "How closely to follow the input image. Higher = more faithful but may reduce diversity. 5.0 recommended"}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "tooltip": "Random seed for reproducible generation. Same seed + same inputs = same output"}),
+                "attention_mode": (["sdpa", "sageattn"], {"default": "sdpa", "tooltip": "Attention implementation. sdpa is standard PyTorch, sageattn uses SageAttention for potential speedup"}),
             },
         }
 
@@ -130,7 +130,7 @@ class Hy3D21VAELoader:
                 "model_name": (folder_paths.get_filename_list("vae"), {"tooltip": "VAE from ComfyUI/models/vae/"}),
             },
             "optional": {
-                "vae_config": ("HY3D21VAECONFIG",),
+                "vae_config": ("HY3D21VAECONFIG", {"tooltip": "Optional custom VAE configuration. Leave unconnected for default settings"}),
             },
         }
 
@@ -180,23 +180,23 @@ class Hy3D21VAEConfig:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "num_latents": ("INT", {"default": 4096}),
-                "embed_dim": ("INT", {"default": 64}),
-                "num_freqs": ("INT", {"default": 8}),
-                "include_pi": ("BOOLEAN", {"default": False}),
-                "heads": ("INT", {"default": 16}),
-                "width": ("INT", {"default": 1024}),
-                "num_encoder_layers": ("INT", {"default": 8}),
-                "num_decoder_layers": ("INT", {"default": 16}),
-                "qkv_bias": ("BOOLEAN", {"default": False}),
-                "qk_norm": ("BOOLEAN", {"default": True}),
-                "scale_factor": ("FLOAT", {"default": 1.0039506158752403}),
-                "geo_decoder_mlp_expand_ratio": ("INT", {"default": 4}),
-                "geo_decoder_downsample_ratio": ("INT", {"default": 1}),
-                "geo_decoder_ln_post": ("BOOLEAN", {"default": True}),
-                "point_feats": ("INT", {"default": 4}),
-                "pc_size": ("INT", {"default": 81920}),
-                "pc_sharpedge_size": ("INT", {"default": 0}),
+                "num_latents": ("INT", {"default": 4096, "tooltip": "Number of latent tokens. Default 4096 matches the pretrained model"}),
+                "embed_dim": ("INT", {"default": 64, "tooltip": "Embedding dimension per latent token"}),
+                "num_freqs": ("INT", {"default": 8, "tooltip": "Positional encoding frequencies for 3D coordinate inputs"}),
+                "include_pi": ("BOOLEAN", {"default": False, "tooltip": "Include pi in positional encoding frequency bands"}),
+                "heads": ("INT", {"default": 16, "tooltip": "Number of attention heads in transformer layers"}),
+                "width": ("INT", {"default": 1024, "tooltip": "Hidden dimension width of transformer layers"}),
+                "num_encoder_layers": ("INT", {"default": 8, "tooltip": "Number of transformer layers in the encoder"}),
+                "num_decoder_layers": ("INT", {"default": 16, "tooltip": "Number of transformer layers in the decoder"}),
+                "qkv_bias": ("BOOLEAN", {"default": False, "tooltip": "Add bias terms to query/key/value projections"}),
+                "qk_norm": ("BOOLEAN", {"default": True, "tooltip": "Apply RMS normalization to query and key vectors"}),
+                "scale_factor": ("FLOAT", {"default": 1.0039506158752403, "tooltip": "Latent space scaling factor. Must match the pretrained checkpoint"}),
+                "geo_decoder_mlp_expand_ratio": ("INT", {"default": 4, "tooltip": "MLP expansion ratio in geometry decoder"}),
+                "geo_decoder_downsample_ratio": ("INT", {"default": 1, "tooltip": "Spatial downsampling ratio in geometry decoder"}),
+                "geo_decoder_ln_post": ("BOOLEAN", {"default": True, "tooltip": "Apply layer normalization after geometry decoder"}),
+                "point_feats": ("INT", {"default": 4, "tooltip": "Number of feature channels per 3D point"}),
+                "pc_size": ("INT", {"default": 81920, "tooltip": "Total number of points in the decoded point cloud (81920 = 320x256)"}),
+                "pc_sharpedge_size": ("INT", {"default": 0, "tooltip": "Additional points for sharp edge preservation. 0 = disabled"}),
             },
         }
 
@@ -219,16 +219,16 @@ class Hy3D21VAEDecode:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "vae": ("HY3DVAE",),
-                "latents": ("HY3DLATENT",),
-                "box_v": ("FLOAT", {"default": 1.01, "min": 0.5, "max": 5.0, "step": 0.01}),
-                "octree_resolution": ("INT", {"default": 256, "min": 16, "max": 512, "step": 16}),
-                "mc_level": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01}),
-                "mc_algo": (["mc", "dmc"], {"default": "mc"}),
-                "num_chunks": ("INT", {"default": 8000, "min": 1, "max": 500000, "step": 1000}),
+                "vae": ("HY3DVAE", {"tooltip": "ShapeVAE model from the VAE Loader node"}),
+                "latents": ("HY3DLATENT", {"tooltip": "3D latent codes from the Mesh Generator node"}),
+                "box_v": ("FLOAT", {"default": 1.01, "min": 0.5, "max": 5.0, "step": 0.01, "tooltip": "Bounding box scale for marching cubes. Larger values capture more of the shape but reduce resolution"}),
+                "octree_resolution": ("INT", {"default": 256, "min": 16, "max": 512, "step": 16, "tooltip": "Voxel grid resolution for surface extraction. Higher = finer detail but more memory and time"}),
+                "mc_level": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01, "tooltip": "Isosurface level for marching cubes. 0.0 is standard. Adjust to grow (+) or shrink (-) the surface"}),
+                "mc_algo": (["mc", "dmc"], {"default": "mc", "tooltip": "Surface extraction algorithm. mc = Marching Cubes (standard), dmc = Dual Marching Cubes (preserves sharp features)"}),
+                "num_chunks": ("INT", {"default": 8000, "min": 1, "max": 500000, "step": 1000, "tooltip": "Split decoding into chunks to reduce memory usage. Lower = less memory but slower"}),
             },
             "optional": {
-                "flash_vdm": ("BOOLEAN", {"default": False}),
+                "flash_vdm": ("BOOLEAN", {"default": False, "tooltip": "Enable flash volume decoding for faster inference (experimental)"}),
             },
         }
 
@@ -272,10 +272,10 @@ class Hy3D21ResizeImages:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "image": ("IMAGE",),
-                "width": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),
-                "height": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),
-                "sampling": (["nearest", "bilinear", "bicubic", "lanczos"],),
+                "image": ("IMAGE", {"tooltip": "Input image to resize"}),
+                "width": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1, "tooltip": "Target width in pixels"}),
+                "height": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1, "tooltip": "Target height in pixels"}),
+                "sampling": (["nearest", "bilinear", "bicubic", "lanczos"], {"tooltip": "Interpolation method. lanczos is highest quality, nearest is fastest"}),
             },
         }
 
@@ -308,7 +308,7 @@ class Hy3D21LoadImageWithTransparency:
         files = [f for f in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, f))]
         return {
             "required": {
-                "image": (sorted(files), {"image_upload": True}),
+                "image": (sorted(files), {"image_upload": True, "tooltip": "Image file to load from ComfyUI input directory"}),
             },
         }
 
@@ -389,24 +389,24 @@ class Hy3D21MeshGenerationBatch:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "input_folder": ("STRING",),
-                "output_folder": ("STRING",),
-                "vae_model_name": (folder_paths.get_filename_list("vae"),),
-                "dit_model_name": (folder_paths.get_filename_list("diffusion_models"),),
-                "steps": ("INT", {"default": 50, "min": 1, "max": 100, "step": 1}),
-                "guidance_scale": ("FLOAT", {"default": 5.0, "min": 1, "max": 30, "step": 0.1}),
-                "box_v": ("FLOAT", {"default": 1.01, "min": 0.5, "max": 5.0, "step": 0.01}),
-                "octree_resolution": ("INT", {"default": 256, "min": 16, "max": 512, "step": 16}),
-                "mc_level": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01}),
-                "mc_algo": (["mc", "dmc"], {"default": "mc"}),
-                "num_chunks": ("INT", {"default": 8000, "min": 1, "max": 500000, "step": 1000}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 0x7FFFFFFF}),
-                "generate_random_seed": ("BOOLEAN", {"default": True}),
-                "simplify": ("BOOLEAN", {"default": True}),
-                "max_facenum": ("INT", {"default": 40000, "min": 1, "max": 10000000, "step": 1}),
-                "remove_background": ("BOOLEAN", {"default": False}),
-                "attention_mode": (["sdpa", "sageattn"], {"default": "sdpa"}),
-                "skip_generated_mesh": ("BOOLEAN", {"default": True}),
+                "input_folder": ("STRING", {"tooltip": "Folder containing input images (jpg, png, etc.)"}),
+                "output_folder": ("STRING", {"tooltip": "Folder where generated meshes will be saved as GLB files"}),
+                "vae_model_name": (folder_paths.get_filename_list("vae"), {"tooltip": "ShapeVAE checkpoint for decoding latents to mesh"}),
+                "dit_model_name": (folder_paths.get_filename_list("diffusion_models"), {"tooltip": "DiT diffusion model for generating 3D latents from images"}),
+                "steps": ("INT", {"default": 50, "min": 1, "max": 100, "step": 1, "tooltip": "Number of diffusion steps per image. More = better quality, slower"}),
+                "guidance_scale": ("FLOAT", {"default": 5.0, "min": 1, "max": 30, "step": 0.1, "tooltip": "How closely to follow each input image. 5.0 recommended"}),
+                "box_v": ("FLOAT", {"default": 1.01, "min": 0.5, "max": 5.0, "step": 0.01, "tooltip": "Bounding box scale for marching cubes extraction"}),
+                "octree_resolution": ("INT", {"default": 256, "min": 16, "max": 512, "step": 16, "tooltip": "Voxel resolution for surface extraction. Higher = finer detail"}),
+                "mc_level": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01, "tooltip": "Isosurface level. 0.0 is standard"}),
+                "mc_algo": (["mc", "dmc"], {"default": "mc", "tooltip": "mc = Marching Cubes, dmc = Dual Marching Cubes"}),
+                "num_chunks": ("INT", {"default": 8000, "min": 1, "max": 500000, "step": 1000, "tooltip": "Decode in chunks to reduce memory. Lower = less memory"}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0x7FFFFFFF, "tooltip": "Base random seed. Overridden if generate_random_seed is enabled"}),
+                "generate_random_seed": ("BOOLEAN", {"default": True, "tooltip": "Use a random seed for each image instead of the fixed seed"}),
+                "simplify": ("BOOLEAN", {"default": True, "tooltip": "Reduce face count after generation using quadric decimation"}),
+                "max_facenum": ("INT", {"default": 40000, "min": 1, "max": 10000000, "step": 1, "tooltip": "Maximum faces when simplify is enabled"}),
+                "remove_background": ("BOOLEAN", {"default": False, "tooltip": "Remove image background before generation (requires rembg)"}),
+                "attention_mode": (["sdpa", "sageattn"], {"default": "sdpa", "tooltip": "sdpa = standard, sageattn = SageAttention"}),
+                "skip_generated_mesh": ("BOOLEAN", {"default": True, "tooltip": "Skip images that already have a generated GLB in the output folder"}),
             },
         }
 
