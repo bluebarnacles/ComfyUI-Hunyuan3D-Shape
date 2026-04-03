@@ -1,0 +1,9 @@
+torch
+transformers
+safetensors
+omegaconf
+trimesh
+Pillow
+numpy
+einops
+pymeshlab
