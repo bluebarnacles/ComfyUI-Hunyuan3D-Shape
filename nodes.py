@@ -244,18 +244,30 @@ class Hy3D21VAEDecode:
         vae.eval()
         vae.to(device)
 
-        mesh_output = vae.decode(
+        # Cast latents to match VAE's dtype (fp16 weights + fp32 latents fails on MPS)
+        vae_dtype = next(vae.parameters()).dtype
+        latents = latents.to(dtype=vae_dtype)
+
+        # Pass through VAE forward: post_kl maps embed_dim(64) → width(1024), then transformer
+        latents = vae(latents)
+
+        mesh_output = vae.latents2mesh(
             latents,
-            box_v=box_v,
+            bounds=box_v,
             octree_resolution=octree_resolution,
             mc_level=mc_level,
             mc_algo=mc_algo,
             num_chunks=num_chunks,
         )
 
-        print(f"Decoded mesh with {mesh_output.vertices.shape[0]} vertices and {mesh_output.faces.shape[0]} faces")
+        # latents2mesh returns a list of Latent2MeshOutput (one per batch item)
+        mesh_output = mesh_output[0]
+        print(f"Decoded mesh with {mesh_output.mesh_v.shape[0]} vertices and {mesh_output.mesh_f.shape[0]} faces")
 
-        mesh = Trimesh.Trimesh(vertices=mesh_output.vertices, faces=mesh_output.faces)
+        mesh = Trimesh.Trimesh(vertices=mesh_output.mesh_v, faces=mesh_output.mesh_f)
+        # Marching cubes can produce inward-facing normals — flip them outward
+        if mesh.volume < 0:
+            mesh.invert()
         vae.to("cpu")
         mm.soft_empty_cache()
         gc.collect()
@@ -482,12 +494,22 @@ class Hy3D21MeshGenerationBatch:
                     generator=torch.manual_seed(seed),
                 )
 
-                mesh_output = vae.decode(
-                    latents, box_v=box_v, octree_resolution=octree_resolution,
+                # Cast latents to match VAE's dtype (fp16 weights + fp32 latents fails on MPS)
+                vae_dtype = next(vae.parameters()).dtype
+                latents = latents.to(dtype=vae_dtype)
+
+                # Pass through VAE forward: post_kl maps embed_dim(64) → width(1024), then transformer
+                latents = vae(latents)
+
+                mesh_output = vae.latents2mesh(
+                    latents, bounds=box_v, octree_resolution=octree_resolution,
                     mc_level=mc_level, mc_algo=mc_algo, num_chunks=num_chunks,
                 )
 
-                mesh = Trimesh.Trimesh(vertices=mesh_output.vertices, faces=mesh_output.faces)
+                mesh = Trimesh.Trimesh(vertices=mesh_output[0].mesh_v, faces=mesh_output[0].mesh_f)
+                # Marching cubes can produce inward-facing normals — flip them outward
+                if mesh.volume < 0:
+                    mesh.invert()
 
                 if simplify:
                     current_faces_num = mesh.faces.shape[0]
